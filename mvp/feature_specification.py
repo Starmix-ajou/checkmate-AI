@@ -420,7 +420,6 @@ async def update_feature_specification(email: str, feedback: str, createdFeature
     update_prompt = ChatPromptTemplate.from_template("""
     당신은 사용자의 피드백을 분석하고 프로젝트 정보를 바탕으로 기능 명세에서 누락된 정보를 생성하거나 피드백을 반영하여 정보를 수정하는 전문가입니다.
     반드시 JSON으로만 응답해주세요. 추가 설명이나 주석은 절대 포함하지 마세요.
-    _id는 절대 수정하지 말고, 값이 없더라도 추가하지 마세요. current_features에 제시된 _id의 값과 동일한 값만 반환하세요.
     
     프로젝트 정보:
     1. 프로젝트 시작일:
@@ -437,16 +436,30 @@ async def update_feature_specification(email: str, feedback: str, createdFeature
     사용자 피드백:
     다음은 기능 명세 단계에서 받은 사용자의 피드백입니다: {feedback}
     이 피드백이 다음 중 어떤 유형인지 판단해주세요:
-    
     1. 수정/삭제 요청:
-    예시: "담당자를 다른 사람으로 변경해 주세요", "~기능 개발 우선순위를 낮추세요", "~기능을 삭제해주세요"
-
+    예시: "담당자를 다른 사람으로 변경해 주세요", "~기능 개발 우선순위를 낮추세요", "~기능을 삭제해주세요.
     2. 종료 요청:
     예시: "이대로 좋습니다", "더 이상 수정할 필요 없어요", "다음으로 넘어가죠"
+    1번 유형의 경우는 isNextStep을 0으로, 2번 유형의 경우는 isNextStep을 1로 설정해주세요.
 
     다음 형식으로 응답해주세요:
+    주의사항:
+    0. 반드시 모든 내용을 한국어로 작성해주세요. 만약 한국어로 대체하기 어려운 단어가 있다면 영어를 사용해 주세요.
+    1. 반드시 위 JSON 형식을 정확하게 따라주세요.
+    2. 모든 문자열은 쌍따옴표(")로 감싸주세요.
+    3. 객체의 마지막 항목에는 쉼표를 넣지 마세요.
+    4. features에서 null로 전달된 값이 있는 필드는 형식에 맞게 채워주세요.
+    5. isNextStep은 사용자의 피드백이 종료 요청인 경우 1, 수정/삭제 요청인 경우 0으로 설정해주세요.
+    6. 각 기능의 모든 필드를 포함해주세요.
+    7. difficulty는 1에서 5 사이의 정수여야 합니다.
+    8. expected_days는 양의 정수여야 합니다.
+    9. 절대 주석을 추가하지 마세요.
+    10. startDate와 endDate는 프로젝트 시작일인 {startDate}와 종료일인 {endDate} 사이에 있어야 하며, 그 기간이 expected_days와 일치해야 합니다.
+    11. 요청에 포함된 값들 중 null이 존재할 경우, 해당 필드를 조건에 맞게 생성해 주세요.
+    12. _id는 절대 수정하지 말고, 값이 없더라도 추가하지 마세요. current_features에 제시된 _id의 값과 동일한 값만 반환하세요.
+    13. isNextStep을 1로 판단하였다면, 마지막으로 {feedback}의 내용이 반환할 결과에 반영되었는지 확인하세요.
     {{
-        "isNextStep": 0 또는 1,  # 0: 수정/삭제 요청, 1: 종료 요청
+        "isNextStep": 0 또는 1,
         "features": [
             {{
                 "_id": "기능의 고유 ID",
@@ -465,20 +478,6 @@ async def update_feature_specification(email: str, feedback: str, createdFeature
             }}
         ]
     }}
-
-    주의사항:
-    0. 반드시 모든 내용을 한국어로 작성해주세요. 만약 한국어로 대체하기 어려운 단어가 있다면 영어를 사용해 주세요.
-    1. 반드시 위 JSON 형식을 정확하게 따라주세요.
-    2. 모든 문자열은 쌍따옴표(")로 감싸주세요.
-    3. 객체의 마지막 항목에는 쉼표를 넣지 마세요.
-    4. features에서 null로 전달된 값이 있는 필드는 형식에 맞게 채워주세요.
-    5. isNextStep은 사용자의 피드백이 종료 요청인 경우 1, 수정/삭제 요청인 경우 0으로 설정해주세요.
-    6. 각 기능의 모든 필드를 포함해주세요.
-    7. difficulty는 1에서 5 사이의 정수여야 합니다.
-    8. expected_days는 양의 정수여야 합니다.
-    9. 절대 주석을 추가하지 마세요.
-    10. startDate와 endDate는 프로젝트 시작일인 {startDate}와 종료일인 {endDate} 사이에 있어야 하며, 그 기간이 expected_days와 일치해야 합니다.
-    11. 요청에 포함된 값들 중 null이 존재할 경우, 해당 필드를 조건에 맞게 생성해 주세요.
     """)
     
     messages = update_prompt.format_messages(
@@ -530,7 +529,7 @@ async def update_feature_specification(email: str, feedback: str, createdFeature
         for feature in feature_list:
             required_fields = [
                 "_id", "name", "useCase", "input", "output", "precondition", "postcondition",
-                "stack", "expected_days", "startDate", "endDate", "difficulty"
+                "stack", "expected_days", "startDate", "endDate", "difficulty", "priority"
             ]
             for field in required_fields:
                 if field not in feature:
@@ -552,57 +551,65 @@ async def update_feature_specification(email: str, feedback: str, createdFeature
         logger.error(f"GPT API 응답 처리 중 오류 발생: {str(e)}")
         raise Exception(f"GPT API 응답 처리 중 오류 발생: {str(e)}") from e
     
-    # 업데이트된 기능 정보를 기존 기능 리스트와 융합
-    updated_map = {feature["name"]: feature for feature in feature_list}
-    merged_features = []
+#     # 업데이트된 기능 정보를 기존 기능 리스트와 융합
+#     updated_map = {feature["name"]: feature for feature in feature_list}
+#     merged_features = []
     
-    # 기존 기능 리스트 순회
-    for current_feature in current_features:
-        feature_name = current_feature["name"]
-        if feature_name in updated_map:
-            # 업데이트된 기능이 있는 경우
-            updated = updated_map[feature_name]
-            merged_feature = current_feature.copy()
+#     # 기존 기능 리스트 순회
+#     for current_feature in current_features:
+#         feature_name = current_feature["name"]
+#         if feature_name in updated_map:
+#             # 업데이트된 기능이 있는 경우
+#             updated = updated_map[feature_name]
+#             merged_feature = current_feature.copy()
             
-            # expected_days나 difficulty가 변경되었는지 확인
-            if current_feature["expected_days"] is not None and updated["expected_days"] != current_feature["expected_days"]:
-                expected_days_changed = True
-            if current_feature["difficulty"] is not None and updated["difficulty"] != current_feature["difficulty"]:
-                difficulty_changed = True
+#             # expected_days나 difficulty가 변경되었는지 확인
+#             if current_feature["expected_days"] is not None and updated["expected_days"] != current_feature["expected_days"]:
+#                 expected_days_changed = True
+#             if current_feature["difficulty"] is not None and updated["difficulty"] != current_feature["difficulty"]:
+#                 difficulty_changed = True
             
-            merged_feature.update({
-                "useCase": updated["useCase"],
-                "input": updated["input"],
-                "output": updated["output"],
-                "precondition": updated["precondition"],
-                "postcondition": updated["postcondition"],
-                "stack": updated["stack"],
-                "expected_days": updated["expected_days"],
-                "startDate": updated["startDate"],
-                "endDate": updated["endDate"],
-                "difficulty": updated["difficulty"]
-            })
+#             merged_feature.update({
+#                 "useCase": updated["useCase"],
+#                 "input": updated["input"],
+#                 "output": updated["output"],
+#                 "precondition": updated["precondition"],
+#                 "postcondition": updated["postcondition"],
+#                 "stack": updated["stack"],
+#                 "expected_days": updated["expected_days"],
+#                 "startDate": updated["startDate"],
+#                 "endDate": updated["endDate"],
+#                 "difficulty": updated["difficulty"]
+#             })
             
-            # priority 처리
-            if "priority" in updated:
-                # GPT가 직접 priority를 지정한 경우
-                merged_feature["priority"] = updated["priority"]
-            elif expected_days_changed or difficulty_changed:
-                # expected_days나 difficulty가 변경된 경우 우선순위 재계산
-                merged_feature["priority"] = calculate_priority(merged_feature["expected_days"], merged_feature["difficulty"])
-            else:
-                # 변경사항이 없는 경우 기존 priority 유지
-                merged_feature["priority"] = current_feature["priority"]
+#             # priority 처리
+#             if "priority" in updated:
+#                 # GPT가 직접 priority를 지정한 경우
+#                 merged_feature["priority"] = updated["priority"]
+#             elif expected_days_changed or difficulty_changed:
+#                 # expected_days나 difficulty가 변경된 경우 우선순위 재계산
+#                 merged_feature["priority"] = calculate_priority(merged_feature["expected_days"], merged_feature["difficulty"])
+#             else:
+#                 # 변경사항이 없는 경우 기존 priority 유지
+#                 merged_feature["priority"] = current_feature["priority"]
             
-            merged_features.append(merged_feature)
-        else:
-            # 업데이트되지 않은 기능은 그대로 유지
-            merged_features.append(current_feature)
+#             merged_features.append(merged_feature)
+#         else:
+#             # 업데이트되지 않은 기능은 그대로 유지
+#             merged_features.append(current_feature)
+    
+    try:
+        merged_features = gpt_result["features"]
+    except Exception as e:
+        logger.error(f"GPT 응답에서 features 필드 추출 중 오류 발생: {str(e)}")
+        raise Exception(f"GPT 응답에서 features 필드 추출 중 오류 발생: {str(e)}") from e
     
     # _id가 없는 기능에 대해 assign_featureId 호출
     for feature in merged_features:
         if "_id" not in feature:
             feature = assign_featureId(feature)
+        if "priority" not in feature:
+            feature["priority"] = calculate_priority(feature["expected_days"], feature["difficulty"])
     
     # 업데이트된 기능 목록으로 교체
     logger.info("\n=== 업데이트된 feature_specification 데이터 ===")
